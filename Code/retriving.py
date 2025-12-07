@@ -1,3 +1,4 @@
+from langchain_core.runnables import RunnableParallel, RunnableSequence, RunnableLambda
 from langchain_openai import ChatOpenAI
 import os
 from langchain_community.vectorstores import FAISS
@@ -20,18 +21,26 @@ retriever = vectorstore.as_retriever(
 )
 
 
-# now I can send the docs from the retirver and the query to the model
-
 prompt = PromptTemplate(
     template = """You are a very helpful AI assistant, 
     Given the context {docs} and the query {query} give me the answers if
      unsure always say "I don't know" and never say "I am not sure" or """,
     input_variables = ["docs", "query"]
 )
-query = "What is are primitative dataTypes"
-retrieved_docs = retriever.invoke(query)
-all_text = "\n\n".join([doc.page_content for doc in retrieved_docs])
 
-final_prompt = prompt.invoke({"docs": all_text, "query": query})
-answer = model.invoke(final_prompt)
+# Lambda to format docs
+format_docs = RunnableLambda(lambda docs: "\n\n".join([doc.page_content for doc in docs]))
+
+# Chain: retrieve -> format -> prompt -> LLM
+retriever_chain = RunnableSequence(
+
+        retriever,              # Step 1: get docs
+        format_docs,            # Step 2: format docs
+        prompt,                 # Step 3: fill prompt with formatted docs
+        model                   # Step 4: call LLM
+)
+
+# Query
+query = "What are primitive data types?"
+answer = retriever_chain.invoke(query)
 print(answer.content)
